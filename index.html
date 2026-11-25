@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>圓玄學院第三中學｜校園資訊台</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="stage">
+    <img class="studio-bg" src="./assets/campus.jpg" alt="">
+    <header class="header">
+      <div class="brand">
+        <img class="logo" src="./assets/logo.png" alt="圓玄學院第三中學校徽">
+        <div class="brand-text">
+          <div class="station-tag" id="stationTag">校園資訊台</div>
+          <div class="school-name" id="schoolName">圓玄學院第三中學</div>
+        </div>
+      </div>
+      <div class="status-box">
+        <div class="date-weather">
+          <div class="date-txt" id="dateTxt">--月--日</div>
+          <div class="weather-row is-hidden" id="weatherRow">
+            <svg class="weather-icon" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+              <circle cx="14" cy="14" r="6.5" fill="#fbbf24"/>
+              <g stroke="#fbbf24" stroke-width="2.4" stroke-linecap="round">
+                <line x1="14" y1="3" x2="14" y2="5.5"/>
+                <line x1="6.2" y1="6.2" x2="8" y2="8"/>
+                <line x1="3" y1="14" x2="5.5" y2="14"/>
+                <line x1="21.8" y1="6.2" x2="20" y2="8"/>
+              </g>
+              <path d="M13 28h14a5.5 5.5 0 0 0 .8-10.9A7.5 7.5 0 0 0 13.5 16a5.8 5.8 0 0 0-.5 12z" fill="#e0f2fe"/>
+            </svg>
+            <span id="weatherTemp">--°C</span>
+          </div>
+        </div>
+        <div class="v-div"></div>
+        <div class="clock" id="clockTxt">00:00</div>
+      </div>
+    </header>
+    <section class="screen-wrap">
+      <div class="led-screen">
+        <div class="led-top-bar"></div>
+        <div class="meta-row" id="slideMetaRow">
+          <div class="subtitle">
+            <svg class="subtitle-icon" width="40" height="40" viewBox="0 0 40 40" aria-hidden="true"><polygon points="20,3 25,15 38,16 28,24 31,37 20,30 9,37 12,24 2,16 15,15" fill="#f59e0b"/></svg>
+            <span id="slideTypeTag">校園焦點</span>
+          </div>
+          <div class="studio-bug"><span class="bug-dot"></span><span id="slideBugText">即時資訊</span></div>
+        </div>
+        <h1 class="headline" id="slideHeadline">校園資訊台</h1>
+        <div class="photo-frame is-hidden" id="slidePhotoFrame">
+          <img class="slide-photo-img" id="slidePhotoImg" alt="活動焦點相片">
+          <div class="slide-photo-caption is-hidden" id="slidePhotoCaption"></div>
+        </div>
+        <div class="slide-text-panel" id="slideTextPanel">
+          <div class="slide-body-text" id="slideBodyText"></div>
+          <div class="slide-time-tag is-hidden" id="slideTimeTag"></div>
+        </div>
+        <div class="welcome-panel is-hidden" id="welcomePanel">
+          <div class="welcome-school" id="welcomeSchool">圓玄學院第三中學</div>
+          <div class="welcome-sub">歡迎來到校園資訊台</div>
+        </div>
+        <div class="dots-bar" id="dotsBar" aria-label="資訊進度"></div>
+      </div>
+    </section>
+
+    <section class="lower-col" id="lowerCol">
+      <div class="card-act is-hidden" id="cardAct">
+        <div class="card-title">
+          <svg class="card-title-icon" width="38" height="38" viewBox="0 0 38 38" aria-hidden="true">
+            <rect x="4" y="7" width="30" height="26" rx="5" fill="#38bdf8" fill-opacity="0.18" stroke="#38bdf8" stroke-width="2.6"/>
+            <line x1="4" y1="15" x2="34" y2="15" stroke="#38bdf8" stroke-width="2.4"/>
+            <line x1="12" y1="3" x2="12" y2="9" stroke="#7dd3fc" stroke-width="2.8" stroke-linecap="round"/>
+            <line x1="26" y1="3" x2="26" y2="9" stroke="#7dd3fc" stroke-width="2.8" stroke-linecap="round"/>
+            <circle cx="13" cy="22" r="2.3" fill="#bae6fd"/>
+            <circle cx="20" cy="22" r="2.3" fill="#bae6fd"/>
+            <circle cx="27" cy="22" r="2.3" fill="#bae6fd"/>
+            <circle cx="13" cy="28" r="2.3" fill="#bae6fd"/>
+            <circle cx="20" cy="28" r="2.3" fill="#38bdf8"/>
+          </svg>
+          <span>今日活動</span>
+        </div>
+        <div class="act-list" id="actList"></div>
+      </div>
+
+      <div class="card-cd is-hidden" id="cardCd">
+        <div class="cd-left">
+          <svg class="cd-icon" width="36" height="36" viewBox="0 0 40 40" aria-hidden="true">
+            <path d="M11 6 H29 M11 34 H29" stroke="#fbbf24" stroke-width="3.2" stroke-linecap="round"/>
+            <path d="M13 6 V13 C13 17 20 19 20 20 C20 21 13 23 13 27 V34 H27 V27 C27 23 20 21 20 20 C20 19 27 17 27 13 V6 Z" fill="#fbbf24" fill-opacity="0.2" stroke="#fbbf24" stroke-width="2.6" stroke-linejoin="round"/>
+            <polygon points="15,32 25,32 20,25" fill="#fbbf24"/>
+          </svg>
+          <span id="cdTitle">倒數</span>
+        </div>
+        <div class="cd-right">
+          <span>尚餘</span><span class="cd-num" id="cdNum">0</span><span>天</span>
+        </div>
+      </div>
+
+      <div class="card-daily is-hidden" id="cardDaily">
+        <div class="daily-head">
+          <span class="daily-label">每日一題</span>
+          <span class="daily-phase" id="dailyPhase">思考時間</span>
+        </div>
+        <div class="daily-question" id="dailyQuestion"></div>
+        <div class="daily-hint is-hidden" id="dailyHint"></div>
+        <div class="daily-answer-text is-hidden" id="dailyAnswer"></div>
+      </div>
+    </section>
+
+    <div class="anchor-wrap">
+      <img class="anchor-media" id="anchorImg" src="./assets/boy.png" alt="穿校服揮手的男學生">
+      <video class="anchor-media is-hidden" id="anchorVideo" muted loop playsinline></video>
+    </div>
+
+    <footer class="ticker is-hidden" id="tickerBar">
+      <div class="ticker-badge">
+        <svg class="ticker-icon" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+          <path d="M6 14 H13 L25 7 V29 L13 22 H6 Z" fill="#061329"/>
+          <path d="M29 12 C32 15 32 21 29 24" fill="none" stroke="#061329" stroke-width="3" stroke-linecap="round"/>
+        </svg>
+        <span>校園通告</span>
+      </div>
+      <div class="ticker-text" id="tickerViewport"><span class="ticker-inner" id="tickerText"></span></div>
+    </footer>
+  </main>
+<script src="./config.js"></script>
+<script src="./logic.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

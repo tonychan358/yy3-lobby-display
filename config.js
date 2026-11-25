@@ -1,0 +1,11 @@
+window.LOBBY_CONFIG = {
+  FEED_URL: 'https://script.google.com/macros/s/AKfycbz788l-1cLDlGHrWV9b2Ow1ptDoi8aNUYCOR9YRplwXeZpitXIX4-lBtys71qHoaSZzPw/exec',
+  SCHOOL_NAME: '圓玄學院第三中學',
+  STATION_TAG: '校園資訊台',
+  WEATHER_STATION: '將軍澳',
+  REFRESH_INTERVAL_MS: 300000,
+  SLIDE_INTERVAL_MS: 10000,
+  DAILY_QUESTION_MS: 20000,
+  DAILY_ANSWER_MS: 8000,
+  TICKER_INTERVAL_MS: 8000
+};
