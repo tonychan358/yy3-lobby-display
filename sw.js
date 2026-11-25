@@ -1,5 +1,5 @@
 // shortcut: REVIEW #17 intentionally not changed in fix1 — keep network-first shell caching with skipWaiting/clients.claim without versioned asset manifests.
-var SHELL_CACHE = 'lobby-shell-v2';
+var SHELL_CACHE = 'lobby-shell-v3';
 var SHELL_ASSETS = [
   './',
   './index.html',
@@ -54,8 +54,9 @@ self.addEventListener('fetch', function (event) {
     fetch(req, { cache: 'no-cache' }).then(function (res) {
       if (res && res.status === 200) {
         var copy = res.clone();
+        var cacheKey = url.indexOf('?') === -1 ? req : url.split('?')[0];
         event.waitUntil(caches.open(SHELL_CACHE).then(function (cache) {
-          return cache.put(req, copy);
+          return cache.put(cacheKey, copy);
         }));
       }
       return res;

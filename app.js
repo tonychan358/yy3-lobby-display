@@ -8,26 +8,35 @@
   var BUG_LABELS = {
     '獎項': '校園焦點',
     '活動': '活動速遞',
-    '日程': '校園日程'
+    '分享': '校園分享',
+    '榮譽榜': '榮譽榜',
+    '歡迎': '歡迎'
   };
 
   var state = {
     rawItems: [],
     view: L.partitionItems([]),
     slideIndex: 0,
-    dailyIndex: 0,
-    dailyShowAnswer: false,
+    actPage: 0,
+    actPerPage: 3,
+    cdIndex: 0,
     tickerIndex: 0,
     fixedPage: L.parseFixedPage(window.location.search),
+    accessKey: L.parseAccessKey(window.location.search),
+    preview: false,
+    previewWelcome: false,
+    focusActId: '',
+    focusReminderId: '',
     currentSlide: null,
     activePhotoIds: {},
     displayedPhotoId: '',
+    displayedSlideId: '',
     photoRenderSeq: 0,
     photoUrls: {},
     feedSeq: 0,
     feedInFlight: false,
     slideTimer: null,
-    dailyTimer: null,
+    lowerTimer: null,
     tickerTimer: null
   };
 
@@ -113,9 +122,21 @@
     } catch (e) {}
   }
 
-  function buildPhotoRequestUrl(photoId) {
+  function appendAccessKey(url) {
+    if (!state.accessKey) {
+      return url;
+    }
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    return url + sep + 'k=' + encodeURIComponent(state.accessKey);
+  }
+
+  function buildPhotoCacheKey(photoId) {
     return cfg.FEED_URL + (cfg.FEED_URL.indexOf('?') === -1 ? '?' : '&') +
       'img=' + encodeURIComponent(photoId);
+  }
+
+  function buildPhotoRequestUrl(photoId) {
+    return appendAccessKey(buildPhotoCacheKey(photoId));
   }
 
   function withCacheBust(url) {
@@ -131,6 +152,7 @@
       imgEl.removeAttribute('src');
     }
     state.displayedPhotoId = '';
+    state.displayedSlideId = '';
   }
 
   function deletePhotoCache(photoId) {
@@ -138,10 +160,10 @@
     if (!cfg.FEED_URL || !window.caches) {
       return;
     }
-    var reqUrl = buildPhotoRequestUrl(photoId);
+    var cacheKey = buildPhotoCacheKey(photoId);
     try {
       window.caches.open(PHOTO_CACHE_NAME).then(function (cache) {
-        return cache.delete(reqUrl);
+        return cache.delete(cacheKey);
       }).catch(function () {});
     } catch (e) {}
   }
@@ -155,6 +177,11 @@
       callback(state.photoUrls[photoId]);
       return;
     }
+    if (state.preview) {
+      callback(null);
+      return;
+    }
+    var cacheKey = buildPhotoCacheKey(photoId);
     var reqUrl = buildPhotoRequestUrl(photoId);
 
     function fetchFromNetworkAndCache() {
@@ -178,7 +205,7 @@
               if (!state.activePhotoIds[photoId]) {
                 return;
               }
-              return cache.put(reqUrl, new Response(JSON.stringify({ mime: json.mime, data: json.data }), {
+              return cache.put(cacheKey, new Response(JSON.stringify({ mime: json.mime, data: json.data }), {
                 headers: { 'Content-Type': 'application/json' }
               }));
             }).catch(function () {});
@@ -194,7 +221,7 @@
       }
       try {
         return window.caches.open(PHOTO_CACHE_NAME).then(function (cache) {
-          return cache.match(reqUrl);
+          return cache.match(cacheKey);
         }).then(function (cachedRes) {
           if (!cachedRes) {
             return null;
@@ -227,24 +254,179 @@
     });
   }
 
+  function renderAwardPeople(lines, hasBody) {
+    var ap = el('awardPeople');
+    if (!lines.length) {
+      toggleHidden(ap, true);
+      clearNode(ap);
+      return;
+    }
+    toggleHidden(ap, false);
+    clearNode(ap);
+    ap.className = 'award-people ' + (lines.length <= 3 ? 'is-one-col' : 'is-two-col');
+    var maxLen = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].length > maxLen) {
+        maxLen = lines[i].length;
+      }
+      var item = document.createElement('div');
+      item.className = 'award-person';
+      item.textContent = lines[i];
+      ap.appendChild(item);
+    }
+    if ((lines.length <= 3 && maxLen > 15) || (lines.length > 3 && maxLen > 11)) {
+      ap.classList.add('is-long');
+    }
+    if (hasBody) {
+      ap.classList.add('has-body');
+    }
+  }
+
+  function renderBoardRows(slide) {
+    var listEl = el('boardList');
+    clearNode(listEl);
+    var rows = slide.rows || [];
+    var isRanked = slide.tag === '排名';
+    var startRank = ((slide.page || 1) - 1) * 8;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var rowEl = document.createElement('div');
+      rowEl.className = 'board-row';
+      if (isRanked) {
+        var rank = startRank + i + 1;
+        var rankEl = document.createElement('div');
+        var rankCls = rank === 1 ? 'is-gold' : (rank === 2 ? 'is-silver' : (rank === 3 ? 'is-bronze' : 'is-num'));
+        rankEl.className = 'board-rank ' + rankCls;
+        rankEl.textContent = String(rank);
+        rowEl.appendChild(rankEl);
+      }
+      var nameEl = document.createElement('div');
+      nameEl.className = 'board-name';
+      nameEl.textContent = r.name || '';
+      rowEl.appendChild(nameEl);
+      if (r.note) {
+        var noteEl = document.createElement('div');
+        noteEl.className = 'board-note';
+        noteEl.textContent = r.note;
+        rowEl.appendChild(noteEl);
+      }
+      listEl.appendChild(rowEl);
+    }
+  }
+
+  function applyPhotoShownLayout(slide, shareAuthor, hasAwardPeople) {
+    el('ledScreen').classList.remove('is-headline-only');
+    toggleHidden(el('slideTextPanel'), true);
+    var frame = el('slidePhotoFrame');
+    var cap = el('slidePhotoCaption');
+    var shareSide = el('slideShareSide');
+    if (hasAwardPeople) {
+      el('awardPeople').classList.add('has-photo');
+      el('awardPeople').classList.remove('has-body');
+    }
+    if (slide.type === '分享') {
+      frame.classList.add('is-share-split');
+      cap.textContent = '';
+      toggleHidden(cap, true);
+      if (slide.body || shareAuthor) {
+        el('slideShareSideBody').textContent = slide.body || '';
+        toggleHidden(el('slideShareSideBody'), !slide.body);
+        el('slideShareSideAuthor').textContent = shareAuthor ? ('分享：' + shareAuthor) : '';
+        toggleHidden(el('slideShareSideAuthor'), !shareAuthor);
+        toggleHidden(shareSide, false);
+      } else {
+        toggleHidden(shareSide, true);
+      }
+    } else {
+      frame.classList.remove('is-share-split');
+      toggleHidden(shareSide, true);
+      if (slide.body) {
+        cap.textContent = slide.body;
+        toggleHidden(cap, false);
+      } else {
+        cap.textContent = '';
+        toggleHidden(cap, true);
+      }
+    }
+    toggleHidden(frame, false);
+  }
+
+  function showSlideTextMode(slide, shareAuthor, hasAwardPeople) {
+    clearSlidePhoto();
+    var frame = el('slidePhotoFrame');
+    frame.classList.remove('is-share-split');
+    toggleHidden(frame, true);
+    var ap = el('awardPeople');
+    ap.classList.remove('has-photo');
+    var hasBody = Boolean(slide.body);
+    var hasTime = Boolean(slide.time);
+    var hasAuthor = Boolean(shareAuthor);
+    // Time alone is already in the top-left tag.
+    if (hasBody || hasAuthor) {
+      el('ledScreen').classList.remove('is-headline-only');
+      el('slideBodyText').textContent = slide.body || '';
+      toggleHidden(el('slideBodyText'), !hasBody);
+      el('slideAuthorTag').textContent = hasAuthor ? ('分享：' + shareAuthor) : '';
+      toggleHidden(el('slideAuthorTag'), !hasAuthor);
+      el('slideTimeTag').textContent = hasTime ? ('時間：' + slide.time) : '';
+      toggleHidden(el('slideTimeTag'), !hasTime);
+      toggleHidden(el('slideTextPanel'), false);
+      if (hasAwardPeople && hasBody) {
+        ap.classList.add('has-body');
+      }
+    } else {
+      toggleHidden(el('slideTextPanel'), true);
+      ap.classList.remove('has-body');
+      if (!hasAwardPeople) {
+        el('ledScreen').classList.add('is-headline-only');
+      } else {
+        el('ledScreen').classList.remove('is-headline-only');
+      }
+    }
+  }
+
   function renderMainScreen() {
     var slides = state.view.slides;
+    var ledScreen = el('ledScreen');
     var metaRow = el('slideMetaRow');
+    var headlineRow = el('slideHeadlineRow');
     var headline = el('slideHeadline');
+    var pageBadge = el('slidePageBadge');
+    var awardPeople = el('awardPeople');
     var photoFrame = el('slidePhotoFrame');
     var textPanel = el('slideTextPanel');
+    var boardPanel = el('boardPanel');
     var welcomePanel = el('welcomePanel');
     var dotsBar = el('dotsBar');
     state.photoRenderSeq += 1;
     var renderSeq = state.photoRenderSeq;
 
-    if (slides.length === 0) {
+    var slide = null;
+    var idx = 0;
+    var isFallbackWelcome = false;
+    if (state.previewWelcome && state.view.welcome) {
+      slide = state.view.welcome;
+      isFallbackWelcome = true;
+    } else if (slides.length === 0 && state.view.welcome) {
+      slide = state.view.welcome;
+      isFallbackWelcome = true;
+    } else if (slides.length > 0) {
+      idx = state.fixedPage !== null
+        ? Math.min(state.fixedPage, slides.length - 1)
+        : (state.slideIndex % slides.length);
+      slide = slides[idx];
+    }
+
+    if (!slide) {
       state.currentSlide = null;
       clearSlidePhoto();
+      ledScreen.classList.remove('is-headline-only');
       toggleHidden(metaRow, true);
-      toggleHidden(headline, true);
+      toggleHidden(headlineRow, true);
+      toggleHidden(awardPeople, true);
       toggleHidden(photoFrame, true);
       toggleHidden(textPanel, true);
+      toggleHidden(boardPanel, true);
       toggleHidden(dotsBar, true);
       toggleHidden(welcomePanel, false);
       el('welcomeSchool').textContent = cfg.SCHOOL_NAME || '圓玄學院第三中學';
@@ -254,36 +436,73 @@
 
     toggleHidden(welcomePanel, true);
     toggleHidden(metaRow, false);
-    toggleHidden(headline, false);
-    toggleHidden(dotsBar, slides.length <= 1);
+    toggleHidden(headlineRow, false);
+    toggleHidden(dotsBar, isFallbackWelcome || slides.length <= 1);
 
-    var idx = state.fixedPage !== null
-      ? Math.min(state.fixedPage, slides.length - 1)
-      : (state.slideIndex % slides.length);
-    var slide = slides[idx];
     state.currentSlide = slide;
     setAction(L.pickAction(slide));
 
-    el('slideTypeTag').textContent = slide.time ? (slide.type + ' · ' + slide.time) : slide.type;
+    if (slide.type === '分享') {
+      el('slideTypeTag').textContent = slide.tag || '分享';
+    } else if (slide.type === '歡迎') {
+      el('slideTypeTag').textContent = '歡迎';
+    } else if (slide.type === '活動') {
+      el('slideTypeTag').textContent = slide.time ? ('活動 · ' + slide.time) : '活動';
+    } else {
+      el('slideTypeTag').textContent = slide.type;
+    }
     el('slideBugText').textContent = BUG_LABELS[slide.type] || '校園資訊';
     headline.textContent = slide.title || '';
+    // Long titles drop to one line when the rest of the panel needs the space.
+    ledScreen.classList.toggle('is-dense', (slide.title || '').length > 11 &&
+      (slide.type === '榮譽榜' || slide.type === '分享' || (slide.type === '獎項' && Boolean(slide.people))));
+
+    if (slide.type === '榮譽榜' && slide.pageCount > 1) {
+      pageBadge.textContent = slide.page + '/' + slide.pageCount;
+      toggleHidden(pageBadge, false);
+    } else {
+      pageBadge.textContent = '';
+      toggleHidden(pageBadge, true);
+    }
 
     clearNode(dotsBar);
-    for (var i = 0; i < slides.length; i++) {
-      var dot = document.createElement('div');
-      dot.className = i === idx ? 'dot-active' : 'dot';
-      dotsBar.appendChild(dot);
+    if (!isFallbackWelcome && slides.length > 1) {
+      for (var i = 0; i < slides.length; i++) {
+        var dot = document.createElement('div');
+        dot.className = i === idx ? 'dot-active' : 'dot';
+        dotsBar.appendChild(dot);
+      }
     }
+
+    if (slide.type === '榮譽榜') {
+      clearSlidePhoto();
+      toggleHidden(photoFrame, true);
+      toggleHidden(textPanel, true);
+      toggleHidden(awardPeople, true);
+      if (!slide.rows || slide.rows.length === 0) {
+        toggleHidden(boardPanel, true);
+        ledScreen.classList.add('is-headline-only');
+      } else {
+        ledScreen.classList.remove('is-headline-only');
+        renderBoardRows(slide);
+        toggleHidden(boardPanel, false);
+      }
+      return;
+    }
+
+    toggleHidden(boardPanel, true);
+    var peopleLines = slide.type === '獎項' ? L.parsePeopleLines(slide.people) : [];
+    renderAwardPeople(peopleLines, Boolean(slide.body));
+    var shareAuthor = slide.type === '分享' ? L.parseShareAuthor(slide.people) : '';
+    var hasAwardPeople = peopleLines.length > 0;
 
     // Periodic re-renders must not flash the text panel over a photo already on screen.
     if (slide.photoId && state.displayedPhotoId === slide.photoId && state.displayedSlideId === slide.id) {
-      var shownCap = el('slidePhotoCaption');
-      shownCap.textContent = slide.body || '';
-      toggleHidden(shownCap, !slide.body);
+      applyPhotoShownLayout(slide, shareAuthor, hasAwardPeople);
       return;
     }
     if (!slide.photoId || !state.photoUrls[slide.photoId]) {
-      showSlideTextMode(slide);
+      showSlideTextMode(slide, shareAuthor, hasAwardPeople);
     }
     if (slide.photoId) {
       resolvePhotoUrl(slide.photoId, function (dataUrl) {
@@ -291,7 +510,7 @@
           return;
         }
         if (!dataUrl) {
-          showSlideTextMode(slide);
+          showSlideTextMode(slide, shareAuthor, hasAwardPeople);
           return;
         }
         var imgEl = el('slidePhotoImg');
@@ -299,23 +518,14 @@
           if (renderSeq !== state.photoRenderSeq || state.currentSlide !== slide || !state.activePhotoIds[slide.photoId]) {
             return;
           }
-          var cap = el('slidePhotoCaption');
-          if (slide.body) {
-            cap.textContent = slide.body;
-            toggleHidden(cap, false);
-          } else {
-            cap.textContent = '';
-            toggleHidden(cap, true);
-          }
           state.displayedPhotoId = slide.photoId;
           state.displayedSlideId = slide.id;
-          toggleHidden(textPanel, true);
-          toggleHidden(photoFrame, false);
+          applyPhotoShownLayout(slide, shareAuthor, hasAwardPeople);
         };
         imgEl.onerror = function () {
           deletePhotoCache(slide.photoId);
           if (renderSeq === state.photoRenderSeq && state.currentSlide === slide) {
-            showSlideTextMode(slide);
+            showSlideTextMode(slide, shareAuthor, hasAwardPeople);
           }
         };
         imgEl.src = dataUrl;
@@ -323,48 +533,99 @@
     }
   }
 
-  function showSlideTextMode(slide) {
-    clearSlidePhoto();
-    toggleHidden(el('slidePhotoFrame'), true);
-    toggleHidden(el('slideTextPanel'), false);
-    el('slideBodyText').textContent = slide.body || slide.title || '';
-    var timeTag = el('slideTimeTag');
-    if (slide.time) {
-      timeTag.textContent = '時間：' + slide.time;
-      toggleHidden(timeTag, false);
-    } else {
-      timeTag.textContent = '';
-      toggleHidden(timeTag, true);
+  function renderDots(container, count, activeIdx) {
+    if (!container) {
+      return;
+    }
+    clearNode(container);
+    if (count <= 1) {
+      toggleHidden(container, true);
+      return;
+    }
+    toggleHidden(container, false);
+    for (var i = 0; i < count; i++) {
+      var dot = document.createElement('span');
+      dot.className = i === activeIdx ? 'card-dot is-active' : 'card-dot';
+      container.appendChild(dot);
+    }
+  }
+
+  function renderReminders() {
+    var card = el('cardReminder');
+    var listEl = el('reminderList');
+    var list = state.view.reminders || [];
+    if (!list.length) {
+      toggleHidden(card, true);
+      clearNode(listEl);
+      return;
+    }
+    var visible = list.slice(0, 2);
+    if (state.focusReminderId) {
+      var fIdx = indexOfId(list, state.focusReminderId);
+      if (fIdx >= 2) {
+        visible = [list[fIdx], list[0]];
+      }
+    }
+    toggleHidden(card, false);
+    clearNode(listEl);
+    for (var i = 0; i < visible.length; i++) {
+      var item = visible[i];
+      var row = document.createElement('div');
+      row.className = 'reminder-row';
+      var titleEl = document.createElement('div');
+      titleEl.className = 'reminder-title';
+      titleEl.textContent = item.title || '';
+      row.appendChild(titleEl);
+      if (item.body) {
+        var bodyEl = document.createElement('div');
+        bodyEl.className = 'reminder-body';
+        bodyEl.textContent = item.body;
+        row.appendChild(bodyEl);
+      }
+      listEl.appendChild(row);
     }
   }
 
   function renderActivities(maxCount) {
     var card = el('cardAct');
     var listEl = el('actList');
-    var activities = state.view.activities;
-    var limit = typeof maxCount === 'number' ? maxCount : activities.length;
-    var visible = activities.slice(0, Math.max(0, limit));
-    if (!visible.length) {
+    var dotsEl = el('actDots');
+    var activities = state.view.activities || [];
+    var perPage = typeof maxCount === 'number' ? Math.max(0, maxCount) : Math.min(3, activities.length);
+    if (!activities.length || perPage === 0) {
       toggleHidden(card, true);
       clearNode(listEl);
+      renderDots(dotsEl, 0, 0);
       return;
     }
+    var pageCount = Math.ceil(activities.length / perPage);
+    if (state.focusActId) {
+      var fIdx = indexOfId(activities, state.focusActId);
+      if (fIdx !== -1) {
+        state.actPage = Math.floor(fIdx / perPage);
+      }
+    }
+    var pageIdx = state.actPage % pageCount;
+    var visible = activities.slice(pageIdx * perPage, (pageIdx + 1) * perPage);
     toggleHidden(card, false);
+    renderDots(dotsEl, pageCount, pageIdx);
     clearNode(listEl);
     for (var i = 0; i < visible.length; i++) {
       var act = visible[i];
       var row = document.createElement('div');
-      row.className = 'act-row';
+      row.className = act.time && act.time.length > 6 ? 'act-row is-stacked' : 'act-row';
 
-      var timeEl = document.createElement('div');
-      timeEl.className = 'act-time';
-      timeEl.textContent = act.time || '今日';
+      if (act.time) {
+        var timeEl = document.createElement('div');
+        timeEl.className = 'act-time';
+        timeEl.textContent = act.time;
+        row.appendChild(timeEl);
+      }
 
       var nameEl = document.createElement('div');
       nameEl.className = 'act-name';
       nameEl.textContent = act.title || '';
 
-      row.appendChild(timeEl);
       row.appendChild(nameEl);
       listEl.appendChild(row);
     }
@@ -372,56 +633,32 @@
 
   function renderCountdown() {
     var card = el('cardCd');
-    var cd = state.view.countdown;
-    if (!cd) {
+    var dotsEl = el('cdDots');
+    var list = state.view.countdowns || [];
+    if (!list.length) {
       toggleHidden(card, true);
+      renderDots(dotsEl, 0, 0);
       return;
     }
     var todayStr = L.formatDeviceDate(new Date());
-    var days = L.calcCountdownDays(todayStr, cd.end);
-    if (days === null) {
+    var valid = [];
+    for (var i = 0; i < list.length; i++) {
+      var days = L.calcCountdownDays(todayStr, list[i].end);
+      if (days !== null) {
+        valid.push({ item: list[i], days: days });
+      }
+    }
+    if (!valid.length) {
       toggleHidden(card, true);
+      renderDots(dotsEl, 0, 0);
       return;
     }
-    el('cdTitle').textContent = cd.title || '倒數';
-    el('cdNum').textContent = String(days);
+    var idx = state.cdIndex % valid.length;
+    var current = valid[idx];
+    el('cdTitle').textContent = current.item.title || '倒數';
+    el('cdNum').textContent = String(current.days);
+    renderDots(dotsEl, valid.length, idx);
     toggleHidden(card, false);
-  }
-
-  function renderDailyQuestion() {
-    var card = el('cardDaily');
-    var list = state.view.dailyList;
-    if (!list.length) {
-      toggleHidden(card, true);
-      return;
-    }
-    toggleHidden(card, false);
-    var item = list[state.dailyIndex % list.length];
-    var phaseEl = el('dailyPhase');
-    var qEl = el('dailyQuestion');
-    var hintEl = el('dailyHint');
-    var ansEl = el('dailyAnswer');
-
-    qEl.textContent = item.title || '';
-    if (item.body) {
-      hintEl.textContent = item.body;
-      toggleHidden(hintEl, false);
-    } else {
-      hintEl.textContent = '';
-      toggleHidden(hintEl, true);
-    }
-
-    if (state.dailyShowAnswer && item.answer) {
-      phaseEl.textContent = '參考答案';
-      phaseEl.className = 'daily-phase is-answer';
-      ansEl.textContent = '答案：' + item.answer;
-      toggleHidden(ansEl, false);
-    } else {
-      phaseEl.textContent = '思考時間';
-      phaseEl.className = 'daily-phase';
-      ansEl.textContent = '';
-      toggleHidden(ansEl, true);
-    }
   }
 
   function fitLowerColumn() {
@@ -442,6 +679,7 @@
       if (plans[i].tier) {
         col.classList.add(plans[i].tier);
       }
+      state.actPerPage = plans[i].acts;
       renderActivities(plans[i].acts);
       var topY = typeof col.offsetTop === 'number' && col.offsetTop > 0 ? col.offsetTop : 1056;
       var h = Math.max(col.scrollHeight || 0, col.offsetHeight || 0);
@@ -491,11 +729,12 @@
       toggleHidden(el('slidePhotoFrame'), true);
     }
     Object.keys(state.photoUrls).forEach(function (id) {
-      if (!keep[id]) {
+      // The admin page sends each preview photo only once.
+      if (!keep[id] && (!state.preview || id.indexOf('draft-') === 0)) {
         delete state.photoUrls[id];
       }
     });
-    if (!cfg.FEED_URL || !window.caches) {
+    if (state.preview || !cfg.FEED_URL || !window.caches) {
       return;
     }
     try {
@@ -512,7 +751,13 @@
     } catch (e) {}
   }
 
+  function currentSlideKey() {
+    var s = state.currentSlide;
+    return s ? (String(s.id || '') + ':' + String(s.page || 0) + ':' + String(s.type || '')) : '';
+  }
+
   function applyItems(items) {
+    var prevKey = currentSlideKey();
     state.rawItems = Array.isArray(items) ? items : [];
     var todayStr = L.formatDeviceDate(new Date());
     var active = L.filterActiveByDeviceDate(state.rawItems, todayStr);
@@ -522,10 +767,10 @@
     } else {
       state.slideIndex = 0;
     }
-    if (state.view.dailyList.length > 0) {
-      state.dailyIndex = state.dailyIndex % state.view.dailyList.length;
+    if (state.view.countdowns.length > 0) {
+      state.cdIndex = state.cdIndex % state.view.countdowns.length;
     } else {
-      state.dailyIndex = 0;
+      state.cdIndex = 0;
     }
     if (state.view.notices.length > 0) {
       state.tickerIndex = state.tickerIndex % state.view.notices.length;
@@ -534,10 +779,13 @@
     }
     prunePhotos(active);
     renderMainScreen();
+    renderReminders();
     renderCountdown();
-    renderDailyQuestion();
     fitLowerColumn();
     renderTicker();
+    if (state.fixedPage !== null || state.previewWelcome || !state.slideTimer || currentSlideKey() !== prevKey) {
+      scheduleSlideCycle();
+    }
   }
 
   function fetchFeed() {
@@ -545,7 +793,7 @@
       return;
     }
     var baseUrl = cfg.FEED_URL ? cfg.FEED_URL : './sample.json';
-    var url = withCacheBust(baseUrl);
+    var url = withCacheBust(appendAccessKey(baseUrl));
     state.feedSeq += 1;
     var seq = state.feedSeq;
     state.feedInFlight = true;
@@ -611,26 +859,53 @@
     }, state.tickerHoldMs || cfg.TICKER_INTERVAL_MS || 8000);
   }
 
-  function scheduleDailyCycle() {
-    if (state.dailyTimer) {
-      clearTimeout(state.dailyTimer);
+  function scheduleSlideCycle() {
+    if (state.slideTimer) {
+      clearTimeout(state.slideTimer);
+      state.slideTimer = null;
     }
-    var qMs = cfg.DAILY_QUESTION_MS || 20000;
-    var aMs = cfg.DAILY_ANSWER_MS || 8000;
-    var delay = state.dailyShowAnswer ? aMs : qMs;
-    state.dailyTimer = setTimeout(function () {
-      var list = state.view.dailyList;
-      if (list.length > 0) {
-        if (!state.dailyShowAnswer && list[state.dailyIndex % list.length].answer) {
-          state.dailyShowAnswer = true;
-        } else {
-          state.dailyShowAnswer = false;
-          state.dailyIndex = (state.dailyIndex + 1) % list.length;
+    if (state.fixedPage !== null || state.previewWelcome) {
+      return;
+    }
+    var slide = state.currentSlide;
+    var delay = (slide && slide.type === '榮譽榜')
+      ? (cfg.BOARD_INTERVAL_MS || 15000)
+      : (cfg.SLIDE_INTERVAL_MS || 10000);
+    state.slideTimer = setTimeout(function () {
+      state.slideTimer = null;
+      if (state.view.slides.length > 1) {
+        state.slideIndex = (state.slideIndex + 1) % state.view.slides.length;
+        renderMainScreen();
+      }
+      scheduleSlideCycle();
+    }, delay);
+  }
+
+  function scheduleLowerCycle() {
+    if (state.lowerTimer) {
+      clearTimeout(state.lowerTimer);
+    }
+    var delay = cfg.LOWER_INTERVAL_MS || 8000;
+    state.lowerTimer = setTimeout(function () {
+      var changed = false;
+      var acts = state.view.activities || [];
+      if (!state.focusActId && state.actPerPage > 0 && acts.length > state.actPerPage) {
+        var actPageCount = Math.ceil(acts.length / state.actPerPage);
+        if (actPageCount > 1) {
+          state.actPage = (state.actPage + 1) % actPageCount;
+          changed = true;
         }
-        renderDailyQuestion();
+      }
+      var cds = state.view.countdowns || [];
+      if (!state.focusCdId && cds.length > 1) {
+        state.cdIndex = (state.cdIndex + 1) % cds.length;
+        renderCountdown();
+        changed = true;
+      }
+      if (changed) {
         fitLowerColumn();
       }
-      scheduleDailyCycle();
+      scheduleLowerCycle();
     }, delay);
   }
 
@@ -728,19 +1003,37 @@
 
   function handlePreviewMessage(e) {
     var d = e.data;
-    if (e.source !== window.parent || !isPreviewOrigin(e.origin) || !d || d.type !== 'lobby-preview' || !Array.isArray(d.items)) {
+    if (e.source !== window.parent || !isPreviewOrigin(e.origin) || !d) {
+      return;
+    }
+    if (d.type === 'lobby-preview-photo') {
+      if (d.photoId && /^data:image\/(jpeg|png);base64,/.test(d.photoData)) {
+        state.photoUrls[d.photoId] = d.photoData;
+        applyItems(state.rawItems);
+      }
+      return;
+    }
+    if (d.type !== 'lobby-preview' || !Array.isArray(d.items)) {
       return;
     }
     if (d.photoId && /^data:image\/(jpeg|png);base64,/.test(d.photoData)) {
       state.photoUrls[d.photoId] = d.photoData;
     }
     var view = L.partitionItems(L.filterActiveByDeviceDate(d.items, L.formatDeviceDate(new Date())));
-    var slide = indexOfId(view.slides, d.focusId);
-    var daily = indexOfId(view.dailyList, d.focusId);
-    var notice = indexOfId(view.notices, d.focusId);
+    var focusId = d.focusId || '';
+    var slide = indexOfId(view.slides, focusId);
+    var actIdx = indexOfId(view.activities, focusId);
+    var cdIdx = indexOfId(view.countdowns, focusId);
+    var remIdx = indexOfId(view.reminders, focusId);
+    var notice = indexOfId(view.notices, focusId);
+
     state.fixedPage = slide === -1 ? null : slide;
-    if (daily !== -1) {
-      state.dailyIndex = daily;
+    state.previewWelcome = Boolean(focusId && view.welcome && view.welcome.id === focusId && slide === -1);
+    state.focusActId = actIdx !== -1 ? focusId : '';
+    state.focusReminderId = remIdx !== -1 ? focusId : '';
+    state.focusCdId = cdIdx !== -1 ? focusId : '';
+    if (cdIdx !== -1) {
+      state.cdIndex = cdIdx;
     }
     if (notice !== -1) {
       state.tickerIndex = notice;
@@ -749,6 +1042,7 @@
   }
 
   function initPreview() {
+    state.preview = true;
     window.addEventListener('message', handlePreviewMessage);
     applyItems([]);
     window.parent.postMessage({ type: 'lobby-preview-ready' }, '*');
@@ -776,18 +1070,11 @@
     }, 60000);
     setInterval(fetchWeather, 900000);
 
-    if (state.fixedPage === null) {
-      state.slideTimer = setInterval(function () {
-        if (state.view.slides.length > 1) {
-          state.slideIndex = (state.slideIndex + 1) % state.view.slides.length;
-          renderMainScreen();
-        }
-      }, cfg.SLIDE_INTERVAL_MS || 10000);
+    if (!state.slideTimer) {
+      scheduleSlideCycle();
     }
-
     scheduleTicker();
-
-    scheduleDailyCycle();
+    scheduleLowerCycle();
   }
 
   init();

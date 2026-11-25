@@ -2,6 +2,8 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
 <title>圓玄學院第三中學｜校園資訊台</title>
 <link rel="stylesheet" href="./styles.css">
 </head>
@@ -38,7 +40,7 @@
       </div>
     </header>
     <section class="screen-wrap">
-      <div class="led-screen">
+      <div class="led-screen" id="ledScreen">
         <div class="led-top-bar"></div>
         <div class="meta-row" id="slideMetaRow">
           <div class="subtitle">
@@ -47,14 +49,26 @@
           </div>
           <div class="studio-bug"><span class="bug-dot"></span><span id="slideBugText">即時資訊</span></div>
         </div>
-        <h1 class="headline" id="slideHeadline">校園資訊台</h1>
+        <div class="headline-row" id="slideHeadlineRow">
+          <h1 class="headline" id="slideHeadline">校園資訊台</h1>
+          <span class="slide-page-badge is-hidden" id="slidePageBadge"></span>
+        </div>
+        <div class="award-people is-hidden" id="awardPeople"></div>
         <div class="photo-frame is-hidden" id="slidePhotoFrame">
           <img class="slide-photo-img" id="slidePhotoImg" alt="活動焦點相片">
           <div class="slide-photo-caption is-hidden" id="slidePhotoCaption"></div>
+          <div class="slide-share-side is-hidden" id="slideShareSide">
+            <div class="share-side-body" id="slideShareSideBody"></div>
+            <div class="share-side-author is-hidden" id="slideShareSideAuthor"></div>
+          </div>
         </div>
         <div class="slide-text-panel" id="slideTextPanel">
           <div class="slide-body-text" id="slideBodyText"></div>
+          <div class="slide-author-tag is-hidden" id="slideAuthorTag"></div>
           <div class="slide-time-tag is-hidden" id="slideTimeTag"></div>
+        </div>
+        <div class="board-panel is-hidden" id="boardPanel">
+          <div class="board-list" id="boardList"></div>
         </div>
         <div class="welcome-panel is-hidden" id="welcomePanel">
           <div class="welcome-school" id="welcomeSchool">圓玄學院第三中學</div>
@@ -65,6 +79,18 @@
     </section>
 
     <section class="lower-col" id="lowerCol">
+      <div class="card-reminder is-hidden" id="cardReminder">
+        <div class="card-title">
+          <svg class="card-title-icon" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+            <path d="M18 4 L33 30 H3 Z" fill="#f97316" fill-opacity="0.2" stroke="#f97316" stroke-width="2.6" stroke-linejoin="round"/>
+            <line x1="18" y1="13" x2="18" y2="21" stroke="#ea580c" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="18" cy="25.5" r="1.8" fill="#ea580c"/>
+          </svg>
+          <span>重要提醒</span>
+        </div>
+        <div class="reminder-list" id="reminderList"></div>
+      </div>
+
       <div class="card-act is-hidden" id="cardAct">
         <div class="card-title">
           <svg class="card-title-icon" width="38" height="38" viewBox="0 0 38 38" aria-hidden="true">
@@ -78,7 +104,8 @@
             <circle cx="13" cy="28" r="2.3" fill="#bae6fd"/>
             <circle cx="20" cy="28" r="2.3" fill="#38bdf8"/>
           </svg>
-          <span>今日活動</span>
+          <span>活動</span>
+          <span class="card-dots is-hidden" id="actDots"></span>
         </div>
         <div class="act-list" id="actList"></div>
       </div>
@@ -92,19 +119,10 @@
           </svg>
           <span id="cdTitle">倒數</span>
         </div>
+        <span class="card-dots is-hidden" id="cdDots"></span>
         <div class="cd-right">
           <span>尚餘</span><span class="cd-num" id="cdNum">0</span><span>天</span>
         </div>
-      </div>
-
-      <div class="card-daily is-hidden" id="cardDaily">
-        <div class="daily-head">
-          <span class="daily-label">每日一題</span>
-          <span class="daily-phase" id="dailyPhase">思考時間</span>
-        </div>
-        <div class="daily-question" id="dailyQuestion"></div>
-        <div class="daily-hint is-hidden" id="dailyHint"></div>
-        <div class="daily-answer-text is-hidden" id="dailyAnswer"></div>
       </div>
     </section>
 

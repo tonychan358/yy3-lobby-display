@@ -74,47 +74,126 @@
     return kept;
   }
 
+  function cloneObj(obj) {
+    var copy = {};
+    for (var k in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) {
+        copy[k] = obj[k];
+      }
+    }
+    return copy;
+  }
+
+  function parsePeopleLines(peopleStr) {
+    if (typeof peopleStr !== 'string' || !peopleStr) {
+      return [];
+    }
+    var raw = peopleStr.replace(/\r\n?/g, '\n').split('\n');
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var line = raw[i].trim();
+      if (line) {
+        out.push(line);
+      }
+    }
+    return out;
+  }
+
+  function parseBoardRows(peopleStr) {
+    var lines = parsePeopleLines(peopleStr);
+    var rows = [];
+    for (var i = 0; i < lines.length; i++) {
+      var parts = lines[i].split('\t');
+      var name = String(parts[0] || '').trim();
+      var note = String(parts[1] || '').trim();
+      if (name) {
+        rows.push({ name: name, note: note });
+      }
+    }
+    return rows;
+  }
+
+  function parseShareAuthor(peopleStr) {
+    var lines = parsePeopleLines(peopleStr);
+    return lines.length > 0 ? lines[0] : '';
+  }
+
   function partitionItems(items) {
     var list = Array.isArray(items) ? items : [];
     var slides = [];
     var activities = [];
-    var countdown = null;
-    var dailyList = [];
+    var reminders = [];
+    var countdowns = [];
     var notices = [];
+    var welcome = null;
 
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
       if (!item || !item.type) {
         continue;
       }
-      if (item.type === '獎項' || item.type === '活動' || item.type === '日程') {
+      var type = item.type === '日程' ? '重要提醒' : item.type;
+      if (type === '獎項' || type === '分享') {
         slides.push(item);
-      }
-      if (item.type === '活動' && activities.length < 3) {
+      } else if (type === '活動') {
+        slides.push(item);
         activities.push(item);
-      }
-      if (item.type === '倒數' && !countdown) {
-        countdown = item;
-      }
-      if (item.type === '每日一題') {
-        dailyList.push(item);
-      }
-      if (item.type === '通告') {
+      } else if (type === '榮譽榜') {
+        var allRows = parseBoardRows(item.people);
+        var pageCount = Math.max(1, Math.ceil(allRows.length / 8));
+        for (var p = 0; p < pageCount; p++) {
+          var pageSlide = cloneObj(item);
+          pageSlide.page = p + 1;
+          pageSlide.pageCount = pageCount;
+          pageSlide.rows = allRows.slice(p * 8, (p + 1) * 8);
+          slides.push(pageSlide);
+        }
+      } else if (type === '歡迎') {
+        if (!welcome) {
+          welcome = item;
+          if (item.tag === '輪播') {
+            slides.push(item);
+          }
+        }
+      } else if (type === '重要提醒') {
+        if (item.type === '日程') {
+          var rem = cloneObj(item);
+          rem.type = '重要提醒';
+          reminders.push(rem);
+        } else {
+          reminders.push(item);
+        }
+      } else if (type === '倒數') {
+        countdowns.push(item);
+      } else if (type === '通告') {
         notices.push(item);
       }
     }
 
-    var hasAny = slides.length > 0 || activities.length > 0 || Boolean(countdown) ||
-      dailyList.length > 0 || notices.length > 0;
+    var hasAny = slides.length > 0 || activities.length > 0 || reminders.length > 0 ||
+      countdowns.length > 0 || notices.length > 0 || Boolean(welcome);
 
     return {
       slides: slides,
       activities: activities,
-      countdown: countdown,
-      dailyList: dailyList,
+      reminders: reminders,
+      countdowns: countdowns,
       notices: notices,
+      welcome: welcome,
       hasAny: hasAny
     };
+  }
+
+  function parseAccessKey(searchStr) {
+    if (typeof searchStr !== 'string' || !searchStr) {
+      return '';
+    }
+    var match = /(?:^\?|&)k=([^&]*)(?:&|$)/.exec(searchStr);
+    if (!match) {
+      return '';
+    }
+    var val = match[1];
+    return /^[A-Za-z0-9_-]{16,64}$/.test(val) ? val : '';
   }
 
   function parseFixedPage(searchStr) {
@@ -157,7 +236,12 @@
   }
 
   var ACTIONS = ['wave', 'thumb', 'point', 'idea'];
-  var DEFAULT_ACTIONS = { '獎項': 'thumb', '活動': 'point', '日程': 'idea' };
+  var DEFAULT_ACTIONS = {
+    '獎項': 'thumb',
+    '榮譽榜': 'thumb',
+    '活動': 'point',
+    '分享': 'point'
+  };
 
   function pickAction(slide) {
     if (!slide) {
@@ -181,8 +265,12 @@
     formatClock: formatClock,
     calcCountdownDays: calcCountdownDays,
     filterActiveByDeviceDate: filterActiveByDeviceDate,
+    parsePeopleLines: parsePeopleLines,
+    parseBoardRows: parseBoardRows,
+    parseShareAuthor: parseShareAuthor,
     partitionItems: partitionItems,
     parseFixedPage: parseFixedPage,
+    parseAccessKey: parseAccessKey,
     extractStationTemp: extractStationTemp,
     shouldDailyReload: shouldDailyReload,
     isSafeImageMime: isSafeImageMime,
