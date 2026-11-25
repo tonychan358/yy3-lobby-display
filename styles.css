@@ -251,6 +251,6 @@ html, body, .stage { background: #bfe4ff; color: #12365c; }
 .lower-col.is-tight .daily-answer-text { font-size: 28px; margin-top: 6px; line-height: 1.2; }
 
 /* The loop video already contains the background and shadow (tools/make_loop.py). */
-#anchorVideo { width: 490px; height: 750px; margin: 0; -webkit-filter: none; filter: none; }
+#anchorVideo, #anchorVideo2 { position: absolute; left: 0; top: 0; width: 490px; height: 750px; margin: 0; -webkit-filter: none; filter: none; }
 /* 60 CJK characters must fit the two caption lines. */
 .slide-photo-caption { font-size: 28px; }

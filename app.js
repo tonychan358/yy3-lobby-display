@@ -248,6 +248,7 @@
       toggleHidden(dotsBar, true);
       toggleHidden(welcomePanel, false);
       el('welcomeSchool').textContent = cfg.SCHOOL_NAME || '圓玄學院第三中學';
+      setAction('wave');
       return;
     }
 
@@ -261,6 +262,7 @@
       : (state.slideIndex % slides.length);
     var slide = slides[idx];
     state.currentSlide = slide;
+    setAction(L.pickAction(slide));
 
     el('slideTypeTag').textContent = slide.time ? (slide.type + ' · ' + slide.time) : slide.type;
     el('slideBugText').textContent = BUG_LABELS[slide.type] || '校園資訊';
@@ -632,46 +634,69 @@
     }, delay);
   }
 
-  function initAnchorVideo() {
-    var img = el('anchorImg');
-    var video = el('anchorVideo');
-    if (!video || !img) {
+  // Two stacked videos: the next action plays before the old one hides, so the character never blinks out.
+  function setAction(action) {
+    if (state.action === action) {
       return;
     }
-    var switched = false;
-    function fallbackToImg() {
-      toggleHidden(video, true);
-      toggleHidden(img, false);
+    state.action = action;
+    var seq = (state.actionSeq = (state.actionSeq || 0) + 1);
+    var cur = state.anchorCurrent;
+    var next = cur === el('anchorVideo') ? el('anchorVideo2') : el('anchorVideo');
+    if (!next) {
+      return;
     }
-    video.addEventListener('error', fallbackToImg);
-    video.addEventListener('canplay', function () {
-      if (switched) {
+    function stale() {
+      return seq !== state.actionSeq;
+    }
+    function fail() {
+      if (stale()) {
         return;
       }
-      var playPromise = null;
+      // Keep whatever is on screen; allow a retry on the next slide.
+      state.action = '';
+      if (!state.anchorCurrent) {
+        toggleHidden(el('anchorImg'), false);
+      }
+    }
+    function show() {
+      if (stale()) {
+        return;
+      }
+      state.anchorCurrent = next;
+      toggleHidden(next, false);
+      toggleHidden(el('anchorImg'), true);
+      if (cur && cur !== next) {
+        toggleHidden(cur, true);
+        cur.pause();
+        cur.removeAttribute('src');
+        cur.load();
+      }
+    }
+    next.onerror = fail;
+    next.oncanplay = function () {
+      next.oncanplay = null;
+      if (stale()) {
+        return;
+      }
+      var playing = null;
       try {
-        playPromise = video.play();
+        playing = next.play();
       } catch (e) {
-        fallbackToImg();
+        fail();
         return;
       }
-      if (playPromise && typeof playPromise.then === 'function') {
-        playPromise.then(function () {
-          switched = true;
-          toggleHidden(img, true);
-          toggleHidden(video, false);
-        }).catch(fallbackToImg);
+      if (playing && typeof playing.then === 'function') {
+        playing.then(show).catch(fail);
       } else {
-        switched = true;
-        toggleHidden(img, true);
-        toggleHidden(video, false);
+        show();
       }
-    });
-    video.src = './assets/boy-loop.mp4';
+    };
+    next.src = './assets/boy-' + action + '.mp4';
     try {
-      video.load();
+      next.load();
     } catch (e) {
-      fallbackToImg();
+      fail();
     }
   }
 
@@ -686,25 +711,69 @@
     navigator.serviceWorker.register('./sw.js').catch(function () {});
   }
 
+  // Admin page embeds this page as its preview, so both always look the same.
+  function isPreviewOrigin(origin) {
+    var local = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return local || /^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/.test(origin);
+  }
+
+  function indexOfId(list, id) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function handlePreviewMessage(e) {
+    var d = e.data;
+    if (e.source !== window.parent || !isPreviewOrigin(e.origin) || !d || d.type !== 'lobby-preview' || !Array.isArray(d.items)) {
+      return;
+    }
+    if (d.photoId && /^data:image\/(jpeg|png);base64,/.test(d.photoData)) {
+      state.photoUrls[d.photoId] = d.photoData;
+    }
+    var view = L.partitionItems(L.filterActiveByDeviceDate(d.items, L.formatDeviceDate(new Date())));
+    var slide = indexOfId(view.slides, d.focusId);
+    var daily = indexOfId(view.dailyList, d.focusId);
+    var notice = indexOfId(view.notices, d.focusId);
+    state.fixedPage = slide === -1 ? null : slide;
+    if (daily !== -1) {
+      state.dailyIndex = daily;
+    }
+    if (notice !== -1) {
+      state.tickerIndex = notice;
+    }
+    applyItems(d.items);
+  }
+
+  function initPreview() {
+    window.addEventListener('message', handlePreviewMessage);
+    applyItems([]);
+    window.parent.postMessage({ type: 'lobby-preview-ready' }, '*');
+  }
+
   function init() {
     el('schoolName').textContent = cfg.SCHOOL_NAME || '圓玄學院第三中學';
     el('stationTag').textContent = cfg.STATION_TAG || '校園資訊台';
     updateClockAndDate();
     fetchWeather();
 
-    var cached = readCachedFeed();
-    if (cached) {
-      applyItems(cached);
+    var preview = /[?&]preview=1(&|$)/.test(window.location.search) && window.parent !== window;
+    if (preview) {
+      initPreview();
+    } else {
+      applyItems(readCachedFeed() || []);
+      fetchFeed();
+      registerServiceWorker();
+      setInterval(fetchFeed, cfg.REFRESH_INTERVAL_MS || 300000);
     }
-    fetchFeed();
-    initAnchorVideo();
-    registerServiceWorker();
 
     setInterval(updateClockAndDate, 15000);
     setInterval(function () {
       applyItems(state.rawItems);
     }, 60000);
-    setInterval(fetchFeed, cfg.REFRESH_INTERVAL_MS || 300000);
     setInterval(fetchWeather, 900000);
 
     if (state.fixedPage === null) {

@@ -156,6 +156,19 @@
     return formatDeviceDate(d) !== String(lastReloadDateStr || '');
   }
 
+  var ACTIONS = ['wave', 'thumb', 'point', 'idea'];
+  var DEFAULT_ACTIONS = { '獎項': 'thumb', '活動': 'point', '日程': 'idea' };
+
+  function pickAction(slide) {
+    if (!slide) {
+      return 'wave';
+    }
+    if (ACTIONS.indexOf(slide.action) !== -1) {
+      return slide.action;
+    }
+    return DEFAULT_ACTIONS[slide.type] || 'wave';
+  }
+
   function isSafeImageMime(mime) {
     return mime === 'image/jpeg' || mime === 'image/png';
   }
@@ -172,6 +185,7 @@
     parseFixedPage: parseFixedPage,
     extractStationTemp: extractStationTemp,
     shouldDailyReload: shouldDailyReload,
-    isSafeImageMime: isSafeImageMime
+    isSafeImageMime: isSafeImageMime,
+    pickAction: pickAction
   };
 }));
